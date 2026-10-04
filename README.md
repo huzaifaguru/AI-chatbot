@@ -109,14 +109,20 @@ tests/test_app.py    Backend tests with a mocked Gemini client
 
 ## What I learned
 
-> *Edit this section in your own words before submitting.*
+**The model doesn't remember anything.** I assumed the API kept track of the conversation, but every request is independent. "Memory" is just the app sending the earlier messages back each time. Once I understood that, conversation history was easy to add, and it also explained why long chats cost more tokens.
 
-- How a chat API works: the model has no memory, so "conversation history" just means sending the earlier messages back with each request.
-- Why API keys belong on a backend and in `.env`, not in frontend code or Git.
-- How system prompts shape the model's behaviour separately from user messages.
-- Handling the ways an external API can fail (bad key, rate limits, outages) so the app doesn't just crash.
-- Model output is untrusted input. Rendering it as HTML without sanitising would open the page to XSS.
-- Testing code that calls an external API by mocking the client.
+**Keeping secrets out of Git takes more care than I expected.** When setting up I pasted my API key into `.env.example` instead of `.env`. `.env.example` is committed, so the key would have ended up public on GitHub. I caught it before pushing. Now I always run `git status` and check what's staged before I commit.
+
+**External APIs fail, and the app has to deal with it.** While testing, Gemini's free tier sometimes returned a 503 "high demand" error. At first that showed up as an error and I refreshed the page, which wiped the chat. I added automatic retries with increasing delays on the server and a "Try again" button in the UI, so a temporary outage doesn't lose the conversation.
+
+**Old environment values can stick around.** After I fixed my key, the app still said it was rejected. The server had started before the key was in `.env`, and Flask's debug reloader kept passing the old placeholder value to the restarted process. Using `load_dotenv(override=True)` fixed it. It took a while to work out because the `.env` file itself was correct.
+
+**Smaller things:**
+- The system prompt is sent separately from the chat messages and controls the bot's tone and formatting.
+- Model output should be treated as untrusted. I render the Markdown replies through DOMPurify so a reply can't inject HTML or scripts into the page.
+- Gemini calls the assistant role `model` instead of `assistant`, so I convert the roles before each request.
+- I can test code that calls an API without a key or internet by mocking the client.
+- Git on Windows ignores filename case but GitHub doesn't. My screenshot was saved as `screenshot.PNG` and the image link broke until I renamed it to `.png`.
 
 ## What I would improve next
 
