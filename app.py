@@ -12,7 +12,9 @@ from flask import Flask, jsonify, render_template, request
 from google import genai
 from google.genai import errors, types
 
-load_dotenv()  # read GEMINI_API_KEY etc. from .env
+# Read GEMINI_API_KEY etc. from .env. override=True makes edits to .env win
+# over values already in the environment (e.g. from the debug auto-reloader).
+load_dotenv(override=True)
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 SYSTEM_PROMPT = os.getenv(
