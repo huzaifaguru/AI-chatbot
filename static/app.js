@@ -42,6 +42,22 @@ function showTyping() {
   return el;
 }
 
+// Error bubble with a "Try again" button. The failed user message is removed
+// from the screen too, because sendMessage() will add it again on retry.
+function showError(msg, failedText, userBubble) {
+  const el = addMessage("error", `⚠️ ${msg} `);
+  const retry = document.createElement("button");
+  retry.className = "secondary retry";
+  retry.textContent = "Try again";
+  retry.addEventListener("click", () => {
+    if (busy) return;
+    el.remove();
+    userBubble.remove();
+    sendMessage(failedText);
+  });
+  el.appendChild(retry);
+}
+
 function setBusy(value) {
   busy = value;
   sendBtn.disabled = value;
@@ -50,7 +66,7 @@ function setBusy(value) {
 
 async function sendMessage(text) {
   history.push({ role: "user", content: text });
-  addMessage("user", text);
+  const userBubble = addMessage("user", text);
   setBusy(true);
   const typing = showTyping();
 
@@ -72,7 +88,7 @@ async function sendMessage(text) {
     history.pop();
     typing.remove();
     const msg = err instanceof TypeError ? "Can't reach the server. Is app.py running?" : err.message;
-    addMessage("error", `⚠️ ${msg}`);
+    showError(msg, text, userBubble);
   } finally {
     setBusy(false);
     input.focus();

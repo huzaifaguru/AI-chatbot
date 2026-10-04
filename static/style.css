@@ -140,4 +140,5 @@ button {
 }
 button.secondary { background: var(--bot); color: var(--text); padding: 8px 12px; }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.retry { margin-left: 8px; padding: 4px 10px; font-size: 0.85rem; }
 #mic.listening { background: #dc2626; color: #fff; }

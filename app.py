@@ -38,7 +38,19 @@ def get_client():
             raise RuntimeError(
                 "GEMINI_API_KEY is not set. Copy .env.example to .env and add your key."
             )
-        _client = genai.Client(api_key=api_key)
+        _client = genai.Client(
+            api_key=api_key,
+            # The free tier is sometimes overloaded (503). Retry a few times with
+            # increasing delays before giving up and showing an error.
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(
+                    attempts=4,
+                    initial_delay=1,
+                    max_delay=8,
+                    http_status_codes=[500, 502, 503, 504],
+                )
+            ),
+        )
     return _client
 
 

@@ -15,7 +15,7 @@ I also added these bonus features:
 | Conversation history | The browser keeps the whole chat and sends it with every request, so the model remembers earlier messages. Only the last 20 messages are sent. |
 | System prompt | Set on the server (`SYSTEM_PROMPT` in `app.py`, can be overridden in `.env`). It sets the bot's tone and asks it to use Markdown. |
 | Loading state | An animated "typing" bubble appears while the server waits for Gemini, and the Send button is disabled. |
-| Error handling | The server validates input and turns Gemini errors (bad key, rate limit, model not found, outage, network) into readable messages. The UI shows them as red bubbles, and the failed message is removed from history so you can just retry. |
+| Error handling | The server validates input and turns Gemini errors (bad key, rate limit, model not found, outage, network) into readable messages. If Gemini is temporarily overloaded (5xx), the server retries up to 3 more times with increasing delays. If it still fails, the UI shows a red bubble with a **Try again** button, and the failed message is removed from history so nothing is lost. |
 | Basic UI | Chat bubbles, auto-growing input, Enter to send / Shift+Enter for a new line, "New chat" button, dark mode support. |
 | Markdown responses | Replies are rendered with `marked` and cleaned with `DOMPurify` so the model's output can't inject HTML or scripts into the page. |
 | Voice input | 🎤 button uses the browser's Web Speech API to turn speech into text (Chrome / Edge). |
