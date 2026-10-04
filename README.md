@@ -8,6 +8,8 @@ Nova is a web chatbot built with Python (Flask) and Google's Gemini API. It's se
 |---|---|
 | ![Welcome screen](docs/day3-welcome.jpg) | ![Conversation](docs/day3-chat.jpg) |
 
+🎥 **[Watch the demo video](https://drive.google.com/file/d/1TR9DkvgVbHYPbYwJ2CjcitE_CSMoFpld/view?usp=drive_link)**
+
 The repo has been built up over the internship tasks:
 
 - **Day 1:** basic chatbot (tagged [`day-1`](https://github.com/huzaifaguru/AI-chatbot/tree/day-1))
