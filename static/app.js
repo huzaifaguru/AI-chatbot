@@ -1,6 +1,7 @@
-// Frontend logic: keeps the conversation history, calls the backend,
-// and renders replies. The history lives here (in the browser) and the whole
-// list is sent on every request so the model remembers earlier messages.
+// Frontend logic: keeps the conversation history, streams replies from the
+// backend, and renders them. The history lives here (in the browser), is saved
+// to localStorage so a refresh doesn't lose it, and the whole list is sent on
+// every request so the model remembers earlier messages.
 
 const messagesEl = document.getElementById("messages");
 const emptyState = document.getElementById("empty-state");
@@ -11,23 +12,48 @@ const micBtn = document.getElementById("mic");
 const newChatBtn = document.getElementById("new-chat");
 const speakToggle = document.getElementById("speak-toggle");
 
-let history = []; // [{ role: "user" | "assistant", content: "..." }]
-let busy = false;
+const STORAGE_KEY = "nova-chat-history";
+let history = loadHistory(); // [{ role: "user" | "assistant", content: "..." }]
+let controller = null; // AbortController for the reply being streamed, if any
+let chatId = 0; // bumped by "New chat" so a stopped reply isn't saved into the new chat
 
+// ---- Saving the chat so it survives a page refresh ----
+function loadHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!Array.isArray(saved)) return [];
+    return saved.filter(
+      (m) => (m.role === "user" || m.role === "assistant") && typeof m.content === "string"
+    );
+  } catch {
+    return []; // storage blocked or corrupted: start fresh
+  }
+}
+
+function saveHistory() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+  } catch {
+    // storage full or blocked: the chat still works, it just won't be saved
+  }
+}
+
+// ---- Rendering ----
 function scrollToBottom() {
   messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function renderMarkdown(el, markdown) {
+  // Render Markdown, then sanitise it so the reply can't inject scripts.
+  el.innerHTML = DOMPurify.sanitize(marked.parse(markdown));
 }
 
 function addMessage(role, text) {
   emptyState.hidden = true;
   const el = document.createElement("div");
   el.className = `message ${role}`;
-  if (role === "bot") {
-    // Render Markdown, then sanitise it so the reply can't inject scripts.
-    el.innerHTML = DOMPurify.sanitize(marked.parse(text));
-  } else {
-    el.textContent = text; // user text and errors are shown as plain text
-  }
+  if (role === "bot") renderMarkdown(el, text);
+  else el.textContent = text; // user text and errors are shown as plain text
   messagesEl.appendChild(el);
   scrollToBottom();
   return el;
@@ -50,7 +76,7 @@ function showError(msg, failedText, userBubble) {
   retry.className = "secondary retry";
   retry.textContent = "Try again";
   retry.addEventListener("click", () => {
-    if (busy) return;
+    if (controller) return;
     el.remove();
     userBubble.remove();
     sendMessage(failedText);
@@ -58,47 +84,102 @@ function showError(msg, failedText, userBubble) {
   el.appendChild(retry);
 }
 
-function setBusy(value) {
-  busy = value;
-  sendBtn.disabled = value;
-  sendBtn.textContent = value ? "…" : "Send";
+function setBusy(busy) {
+  sendBtn.textContent = busy ? "Stop" : "Send";
+  sendBtn.classList.toggle("stop", busy);
+}
+
+// ---- Talking to the backend ----
+
+// Read the Server-Sent Events stream from /api/chat/stream. Calls onText with
+// the full reply so far after every piece, and returns the finished reply.
+async function readStream(res, onText) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop(); // the last piece may be incomplete
+    for (const event of events) {
+      if (!event.startsWith("data: ")) continue;
+      const data = JSON.parse(event.slice(6));
+      if (data.error) throw new Error(data.error);
+      if (data.text) {
+        text += data.text;
+        onText(text);
+      }
+    }
+  }
+  if (!text) throw new Error("The reply was cut off. Please try again.");
+  return text;
 }
 
 async function sendMessage(text) {
   history.push({ role: "user", content: text });
+  saveHistory();
   const userBubble = addMessage("user", text);
+  const botBubble = showTyping();
+  controller = new AbortController();
   setBusy(true);
-  const typing = showTyping();
+  const myChat = chatId;
+  let reply = "";
 
   try {
-    const res = await fetch("/api/chat", {
+    const res = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages: history }),
+      signal: controller.signal,
     });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
-
-    history.push({ role: "assistant", content: data.reply });
-    typing.remove();
-    addMessage("bot", data.reply);
-    speak(data.reply);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Server error (${res.status})`);
+    }
+    await readStream(res, (soFar) => {
+      reply = soFar;
+      renderMarkdown(botBubble, reply);
+      scrollToBottom();
+    });
+    history.push({ role: "assistant", content: reply });
+    speak(reply);
   } catch (err) {
-    // Drop the failed message from history so the next attempt starts clean.
-    history.pop();
-    typing.remove();
-    const msg = err instanceof TypeError ? "Can't reach the server. Is app.py running?" : err.message;
-    showError(msg, text, userBubble);
+    if (myChat !== chatId) {
+      // "New chat" was clicked mid-reply: the old chat is already cleared.
+    } else if (err.name === "AbortError" && reply) {
+      // Stopped part-way: keep what arrived so far.
+      history.push({ role: "assistant", content: reply });
+    } else if (err.name === "AbortError") {
+      // Stopped before anything arrived: undo the message, put the text back.
+      history.pop();
+      botBubble.remove();
+      userBubble.remove();
+      input.value = text;
+      if (!history.length) emptyState.hidden = false;
+    } else {
+      // Drop the failed message from history so a retry starts clean.
+      history.pop();
+      botBubble.remove();
+      const msg = err instanceof TypeError ? "Can't reach the server. Is app.py running?" : err.message;
+      showError(msg, text, userBubble);
+    }
   } finally {
+    saveHistory();
+    controller = null;
     setBusy(false);
     input.focus();
   }
 }
 
+// ---- Input handling ----
 form.addEventListener("submit", (e) => {
   e.preventDefault();
+  if (controller) return controller.abort(); // the button says "Stop" while busy
   const text = input.value.trim();
-  if (!text || busy) return;
+  if (!text) return;
   input.value = "";
   autoResize();
   sendMessage(text);
@@ -108,21 +189,32 @@ form.addEventListener("submit", (e) => {
 input.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    form.requestSubmit();
+    if (!controller) form.requestSubmit();
   }
 });
 
 function autoResize() {
   input.style.height = "auto";
   input.style.height = `${input.scrollHeight}px`;
+  // Only show a scrollbar once the text is taller than the max height.
+  input.style.overflowY = input.scrollHeight > 160 ? "auto" : "hidden";
 }
 input.addEventListener("input", autoResize);
 
+document.querySelectorAll(".suggestion").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (!controller) sendMessage(btn.dataset.prompt);
+  });
+});
+
 newChatBtn.addEventListener("click", () => {
+  chatId++;
+  controller?.abort();
   history = [];
+  saveHistory();
   messagesEl.querySelectorAll(".message").forEach((el) => el.remove());
   emptyState.hidden = false;
-  speechSynthesis?.cancel();
+  window.speechSynthesis?.cancel();
   input.focus();
 });
 
@@ -135,7 +227,7 @@ function speak(markdown) {
   speechSynthesis.speak(new SpeechSynthesisUtterance(plain));
 }
 speakToggle.addEventListener("change", () => {
-  if (!speakToggle.checked) speechSynthesis?.cancel();
+  if (!speakToggle.checked) window.speechSynthesis?.cancel();
 });
 
 // ---- Voice input (supported in Chrome and Edge) ----
@@ -168,3 +260,6 @@ if (!SpeechRecognition) {
     recognition.start();
   });
 }
+
+// ---- Restore the saved conversation on page load ----
+history.forEach((m) => addMessage(m.role === "assistant" ? "bot" : "user", m.content));

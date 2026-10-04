@@ -121,6 +121,7 @@ header h1 { font-size: 1.15rem; margin: 0; }
   flex: 1;
   resize: none;
   max-height: 160px;
+  overflow-y: hidden;
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -142,3 +143,26 @@ button.secondary { background: var(--bot); color: var(--text); padding: 8px 12px
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button.retry { margin-left: 8px; padding: 4px 10px; font-size: 0.85rem; }
 #mic.listening { background: #dc2626; color: #fff; }
+
+/* ---- Day 2/3 additions ---- */
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.subtitle { font-size: 0.85rem; color: var(--muted); }
+
+.empty-state .hello { font-size: 1.3rem; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+.suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 16px; }
+button.suggestion {
+  padding: 8px 14px;
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+button.suggestion:hover { background: var(--bot); }
+
+button.stop { background: #dc2626; }
+
+@media (max-width: 520px) {
+  .subtitle { display: none; }
+  .message { max-width: 95%; }
+}
