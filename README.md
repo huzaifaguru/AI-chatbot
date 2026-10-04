@@ -46,6 +46,9 @@ I also added these bonus features:
    source .venv/bin/activate
    pip install -r requirements.txt
    ```
+   > On Windows PowerShell, if activation fails with "running scripts is disabled", run
+   > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once, or skip activation and use
+   > `.venv\Scripts\python.exe` in place of `python`.
 
 3. **Add your key.** Copy `.env.example` to `.env` and paste your key in:
    ```
@@ -59,6 +62,8 @@ I also added these bonus features:
    ```
 
 5. Open **http://127.0.0.1:5000** in your browser and start chatting.
+
+**Windows shortcut:** after the first-time setup, double-click `start.bat`. It starts the server and opens the browser for you.
 
 **Run the tests** (no API key needed):
 ```bash

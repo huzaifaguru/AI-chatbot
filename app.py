@@ -89,7 +89,11 @@ def chat():
         response = get_client().models.generate_content(
             model=MODEL,
             contents=to_gemini_contents(messages),
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+                # We don't use tools, so turn off automatic function calling.
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            ),
         )
     except RuntimeError as e:  # missing API key
         return jsonify(error=str(e)), 500
